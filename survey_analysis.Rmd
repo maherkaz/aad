@@ -1,0 +1,432 @@
+---
+title: "Your Document Title"
+author: "Document Author"
+date: "`r Sys.Date()`"
+output:
+  prettydoc::html_pretty:
+    theme: architect
+    highlight: github
+---
+
+```{r}
+library(haven)
+library(skimr);library(survey);library(srvyr);library(tidylog)
+library(tidyverse)
+```
+
+Get the dataframe till now.
+
+```{r}
+
+df <- read_csv('clean_t.csv')
+
+df <- df %>%
+  select(sort(names(.))) # get all var in alphabetical order
+
+glimpse(df)
+
+df <- df %>%
+  select(-X1)
+```
+
+
+determine # per year:
+
+```{r}
+
+df %>% count(year)
+
+df %>% count(died_er) # NA 61
+# remove those patients who have missing for that, as that is going to be our primary end-point.
+
+df <- df %>% tidyr::drop_na(died_er)
+
+# plan to create a simple tableone for the first and last year to see the main differences using survey
+
+dft <- df
+#  filter(year == 2006 | year == 2014)
+
+#dft %>% count(year)
+
+```
+
+There is increase in ED visits for the aad from 2006 (2059) to 2014 (2535)
+
+```{r}
+names(dft)
+```
+
+create tableone of the variables just to see differences:
+
+```{r}
+
+options(survey.lonely.psu = "certainty") # deal with 1 psu 
+
+dft$died_er <- as.factor(dft$died_er)
+
+dft$hosp_type <- as.factor(dft$hosp_type)
+
+dft_s <- survey::svydesign(data = dft, ids = ~hospwt, weights = ~discwt.x, strata = ~neds_stratum, nest = T)
+
+
+vars <- c("admission_day", "age", "amonth",  "cm_arth", "cm_bldloss", 
+"cm_cancer", "cm_chf", "cm_coag", "cm_defanemia", "cm_dm", "cm_dmcx", 
+"cm_drug", "cm_htn", "cm_hypo", "cm_liver", "cm_obese", "cm_pulmcirc", 
+"cm_pvd", "cm_renlfail", #"cm_valve", this variable has 100% patients free of valve comorb 
+"cm_wghtloss", "mets", 
+"died_loc", "discharge_month", "disposition_ed", "disposition_ip",
+"ed_outcome",
+"female", "hosp_cat", 
+"hosp_type", "trauma", "income_zip", 
+"insurance", "los_ip", "totchg_ed", "totchg_ip",
+"pt_location",  "region",  "year")
+
+factorvars <- c("admission_day", "cm_arth", "cm_bldloss", 
+"cm_cancer", "cm_chf", "cm_coag", "cm_defanemia", "cm_dm", "cm_dmcx", 
+"cm_drug", "cm_htn", "cm_hypo", "cm_liver", "cm_obese", "cm_pulmcirc", 
+"cm_pvd", "cm_renlfail", #"cm_valve", 
+"cm_wghtloss",  
+  "female", "hosp_cat", 
+"hosp_type",  "income_zip", 
+"insurance",  "region",  "year")
+
+library(tableone)
+
+t1 <- tableone::svyCreateTableOne(vars = vars,factorVars = factorvars, strata = c("year"),data = dft_s)
+
+t1
+
+
+
+t2 <- tableone::svyCreateTableOne(vars = vars,factorVars = factorvars,data = dft_s, strata = c("died"))
+
+t2
+
+```
+
+```{r}
+skimr::skim(dft$died_er)
+```
+
+survey analysis according to year for the variables:
+
+
+```{r}
+
+# create survey object for the entire dataframe
+
+df_s <- survey::svydesign(data = df, ids = ~hospwt, weights = ~discwt.x, strata = ~neds_stratum, nest = T) # standard survey object for use with svytable for factor variables with more than 2 groups 
+
+df_m <- df %>% 
+  srvyr::as_survey_design(ids = hospwt, weights = discwt.x, nest = T, strata = neds_stratum) # for use with variables with 0/1 data , use survey_prop to get percentages in these variables
+
+```
+
+```{r multi_categotical_survey_table}
+
+df_s2 <- survey::svydesign(data = df, ids = ~hospwt, weights = ~discwt.x, strata = ~neds_stratum, nest = T) # standard survey object for use with svytable for factor variables with more than 2 groups 
+
+vars <- c("died_loc", "discharge_month","disposition_ed","disposition_ip","region","trauma","ed_outcome","insurance")
+
+factorvars <- c("died_loc","discharge_month","disposition_ed","disposition_ip","region","trauma","ed_outcome","insurance")
+
+library(tableone)
+
+t3 <- tableone::svyCreateTableOne(vars = vars,factorVars = factorvars, strata = c("year"),data = df_s2)
+
+print(t3)
+```
+
+
+```{r binary_variables}
+df_m2 <- df %>% 
+  srvyr::as_survey_design(ids = hospwt, weights = discwt.x, nest = T, strata = neds_stratum) # for use with variables with 0/1 data , use survey_prop to get percentages in these variables
+
+vars <- c("admission_day", "female", "died", "died_er", "hosp_cat", "hosp_type", "income_zip", "pt_location", "mets", "cm_arth", "cm_bldloss", "cm_cancer", "cm_chf", "cm_coag", "cm_defanemia", "cm_dm", "cm_dmcx", "cm_drug", "cm_htn", "cm_hypo", "cm_liver", "cm_obese", "cm_pulmcirc", "cm_pvd", "cm_renlfail", "cm_valve", "cm_wghtloss")
+
+factorvars <- c("admission_day", "female", "died", "died_er", "hosp_cat", "hosp_type", "income_zip", "pt_location", "mets", "cm_arth", "cm_bldloss", "cm_cancer", "cm_chf", "cm_coag", "cm_defanemia", "cm_dm", "cm_dmcx", "cm_drug", "cm_htn", "cm_hypo", "cm_liver", "cm_obese", "cm_pulmcirc", "cm_pvd", "cm_renlfail", "cm_valve", "cm_wghtloss")
+
+library(tableone)
+
+t4 <- tableone::svyCreateTableOne(vars = vars,factorVars = factorvars, strata = c("year"),data = df_m2)
+
+t4
+
+
+```
+
+
+> Notice increase in survival % (from died var - which is statistically significant) and decrease in died_er % throughout the years
+> Also increase in urban hospitals throughout the years (hosp_cat & hosp_type)
+
+
+```{r}
+df_m2 <- df %>% 
+  srvyr::as_survey_design(ids = hospwt, weights = discwt.x, nest = T, strata = neds_stratum) # for use with variables with 0/1 data , use survey_prop to get percentages in these variables
+
+vars <- c("died", "died_er", "hosp_cat", "hosp_type")
+
+factorvars <- c("died")
+
+library(tableone)
+
+t5 <- tableone::svyCreateTableOne(vars = vars,factorVars = factorvars, strata = c("year"),data = df_m2)
+
+t5
+
+
+
+```
+
+> General increase in the number of patients coming to the ED with aad, and the most common chronic comorbidity was htn (n=9889.2 in 2006 - up to 11713.3 in 2014)
+
+```{r}
+df$cm_htn = as.factor(df$cm_htn)
+
+df_m2 <- df %>% 
+  srvyr::as_survey_design(ids = hospwt, weights = discwt.x, nest = T, strata = neds_stratum) # for use with variables with 0/1 data , use survey_prop to get percentages in these variables
+
+vars <- c("cm_htn")
+
+factorvars <- c("died")
+
+library(tableone)
+
+t6 <- tableone::svyCreateTableOne(vars = vars,factorVars = factorvars, strata = c("year"),data = df_m2)
+
+t6
+
+
+
+```
+
+
+# Codebook
+
+```{r}
+names(df)
+```
+
+```{r}
+attach(df)
+```
+
+
+Variable   | Class      | Description                   | Range or Levels | NA
+---------: | ------: | --------------------------- | ----------------- | ---
+`admission_day`  | `r class(admission_day)` | whether presented to the ED on a weekend or a weekday (weekend = Sat-Sun, weekday = Mon- Fri) | `r table(admission_day)["Sat-Sun"]` (`r round(100*mean(admission_day == "Sat-Sun", na.rm = T),1)`\%) presented on the weekend, `r table(admission_day)["Mon-Fri"]` (`r round(100*mean(admission_day == "Mon-Fri", na.rm = T),1)`\%) presented on the weekday
+`age` | `r class(age)` | age (years) | Range: `r range(age)` | `r sum(is.na(age))`
+`amonth` | `r class(amonth)` | the month which the patient presented tp the ED (quarter)  | `r table(amonth)["1" : "3"]` (`r round(100*mean(amonth == "1" : "3", na.rm = T),1)`\%) presented January-March, `r table(amonth)["4" : "6"]` (`r round(100*mean(amonth == "4" : "6", na.rm = T),1)`\%) presented April-June, `r table(amonth)["7" : "9"]` (`r round(100*mean(amonth == "7" : "9", na.rm = T),1)`\%) presented July-September, `r table(amonth)["10" : "12"]` (`r round(100*mean(amonth == "10" : "12", na.rm = T),1)`\%) presented October-December  | `r sum(is.na(amonth))`
+`cm_arth` | `r class(cm_arth)` | comorbidity arthritis | `r table(cm_arth)["1"]` (`r round(100*mean(cm_arth == "1", na.rm = T),1)`\%) has arthritis comorbidity, `r table(cm_arth)["0"]` (`r round(100*mean(cm_arth == "0", na.rm = T),1)`\%) does not have arthritis | `r sum(is.na(cm_arth))`
+`cm_bldloss` | `r class(cm_bldloss)` | comorbidity blood loss anemia | `r table(cm_bldloss)["1"]` (`r round(100*mean(cm_bldloss == "1", na.rm = T),1)`\%) has blood loss anemia comorbidity, `r table(cm_bldloss)["0"]` (`r round(100*mean(cm_bldloss == "0", na.rm = T),1)`\%) does not have blood loss anemia | `r sum(is.na(cm_bldloss))`
+`cm_cancer` | `r class(cm_cancer)` | comorbidity cancer | `r table(cm_cancer)["1"]` (`r round(100*mean(cm_cancer == "1", na.rm = T),1)`\%) has cancer comorbidity, `r table(cm_cancer)["0"]` (`r round(100*mean(cm_cancer == "0", na.rm = T),1)`\%) does not have cancer | `r sum(is.na(cm_cancer))`
+`cm_chf` | `r class(cm_chf)` | comorbidity congestive heart failure | `r table(cm_chf)["1"]` (`r round(100*mean(cm_chf == "1", na.rm = T),1)`\%) has congestive heart failure comorbidity, `r table(cm_chf)["0"]` (`r round(100*mean(cm_chf == "0", na.rm = T),1)`\%) does not have congestive heart failure | `r sum(is.na(cm_chf))`
+`cm_coag` | `r class(cm_coag)` | comorbidity coagulopathy | `r table(cm_coag)["1"]` (`r round(100*mean(cm_coag == "1", na.rm = T),1)`\%) has coagulopathy comorbidity, `r table(cm_coag)["0"]` (`r round(100*mean(cm_coag == "0", na.rm = T),1)`\%) does not have coagulopathy | `r sum(is.na(cm_coag))`
+`cm_defanemia` | `r class(cm_defanemia)` | comorbidity deficiency anemia | `r table(cm_defanemia)["1"]` (`r round(100*mean(cm_defanemia == "1", na.rm = T),1)`\%) has deficiency anemia comorbidity, `r table(cm_defanemia)["0"]` (`r round(100*mean(cm_defanemia == "0", na.rm = T),1)`\%) does not have deficiency anemia | `r sum(is.na(cm_defanemia))`
+`cm_dm` | `r class(cm_dm)` | comorbidity diabetes (uncomplicated) | `r table(cm_dm)["1"]` (`r round(100*mean(cm_dm == "1", na.rm = T),1)`\%) has diabetes comorbidity, `r table(cm_dm)["0"]` (`r round(100*mean(cm_dm == "0", na.rm = T),1)`\%) does not have diabetes | `r sum(is.na(cm_dm))`
+`cm_dmcx` | `r class(cm_dmcx)` | comorbidity complicated diabetes | `r table(cm_dmcx)["1"]` (`r round(100*mean(cm_dmcx == "1", na.rm = T),1)`\%) has complicated diabetes comorbidity, `r table(cm_dmcx)["0"]` (`r round(100*mean(cm_dmcx == "0", na.rm = T),1)`\%) does not have complicated diabetes | `r sum(is.na(cm_dmcx))`
+`cm_drug` | `r class(cm_drug)` | comorbidity drug abuse | `r table(cm_drug)["1"]` (`r round(100*mean(cm_drug == "1", na.rm = T),1)`\%) has drug abuse comorbidity, `r table(cm_drug)["0"]` (`r round(100*mean(cm_drug == "0", na.rm = T),1)`\%) does not have drug abuse | `r sum(is.na(cm_drug))`
+`cm_htn` | `r class(cm_htn)` | comorbidity hypertension | `r table(cm_htn)["1"]` (`r round(100*mean(cm_htn == "1", na.rm = T),1)`\%) has hypertension comorbidity, `r table(cm_htn)["0"]` (`r round(100*mean(cm_htn == "0", na.rm = T),1)`\%) does not have hypertension | `r sum(is.na(cm_htn))`
+`cm_hypo` | `r class(cm_hypo)` | comorbidity hypothyroidism | `r table(cm_hypo)["1"]` (`r round(100*mean(cm_hypo == "1", na.rm = T),1)`\%) has hypothyroidism comorbidity, `r table(cm_hypo)["0"]` (`r round(100*mean(cm_hypo == "0", na.rm = T),1)`\%) does not have hypothyroidism | `r sum(is.na(cm_hypo))`
+`cm_liver` | `r class(cm_liver)` | comorbidity liver disease | `r table(cm_liver)["1"]` (`r round(100*mean(cm_liver == "1", na.rm = T),1)`\%) has liver disease comorbidity, `r table(cm_liver)["0"]` (`r round(100*mean(cm_liver == "0", na.rm = T),1)`\%) does not have liver disease | `r sum(is.na(cm_defanemia))`
+`cm_obese` | `r class(cm_obese)` | obesity comorbidity  | `r table(cm_obese)["1"]` (`r round(100*mean(cm_obese == "1", na.rm = T),1)`\%) has obesity comorbidity, `r table(cm_obese)["0"]` (`r round(100*mean(cm_obese == "0", na.rm = T),1)`\%) does not have obesity | `r sum(is.na(cm_obese))`
+`cm_pulmcirc` | `r class(cm_pulmcirc)` | pulmonary circulation disorder comorbidity  | `r table(cm_pulmcirc)["1"]` (`r round(100*mean(cm_pulmcirc == "1", na.rm = T),1)`\%) has pulmonary circulation disorder comorbidity, `r table(cm_pulmcirc)["0"]` (`r round(100*mean(cm_pulmcirc == "0", na.rm = T),1)`\%) does not have pulmonary circulation disorder | `r sum(is.na(cm_pulmcirc))`
+`cm_pvd` | `r class(cm_pvd)` | peripheral vascular disease comorbidity | `r table(cm_pvd)["1"]` (`r round(100*mean(cm_pvd == "1", na.rm = T),1)`\%) has peripheral vascular disease comorbidity, `r table(cm_pvd)["0"]` (`r round(100*mean(cm_pvd == "0", na.rm = T),1)`\%) does not have peripheral vascular disease | `r sum(is.na(cm_pvd))`
+`cm_renlfail` | `r class(cm_renlfail)` | renal failure comorbidity | `r table(cm_renlfail)["1"]` (`r round(100*mean(cm_renlfail == "1", na.rm = T),1)`\%) has renal failure comorbidity, `r table(cm_renlfail)["0"]` (`r round(100*mean(cm_renlfail == "0", na.rm = T),1)`\%) does not have renal failure | `r sum(is.na(cm_renlfail))`
+`cm_wghtloss` | `r class(cm_wghtloss)` | weight loss comorbidity | `r table(cm_wghtloss)["1"]` (`r round(100*mean(cm_wghtloss == "1", na.rm = T),1)`\%) has weight loss comorbidity, `r table(cm_wghtloss)["0"]` (`r round(100*mean(cm_wghtloss == "0", na.rm = T),1)`\%) does not have weight loss | `r sum(is.na(cm_wghtloss))`
+`mets` | `r class(mets)` | metastatic cancer comorbidity | `r table(mets)["1"]` (`r round(100*mean(mets == "1", na.rm = T),1)`\%) has metastatic cancer comorbidity, `r table(mets)["0"]` (`r round(100*mean(mets == "0", na.rm = T),1)`\%) does not have metastatic cancer | `r sum(is.na(mets))`
+`died_er` | `r class(died_er)` | whether the patient died in the ED | `r table(died_er)["1"]` (`r round(100*mean(died_er == "1", na.rm = T),1)`\%) died in the ED, `r table(died_er)["0"]` (`r round(100*mean(died_er == "0", na.rm = T),1)`\%) patient was dispotioned from the ED (transferred,admitted,home, against medical advice) | `r sum(is.na(died_er))`
+`died` | `r class(died)` | whether the patient died or survived | `r table(died)["died"]` (`r round(100*mean(died == "died", na.rm = T),1)`\%) patient died, `r table(died)["survived"]` (`r round(100*mean(died == "survived", na.rm = T),1)`\%) patient survived | `r sum(is.na(died))`
+`died_loc` | `r class(died_loc)` | whether the patient died in the ED or in the hospital | `r table(died_loc)["ED"]` (`r round(100*mean(died_loc == "ED", na.rm = T),1)`\%) died in the ED, `r table(died_loc)["hospital"]` (`r round(100*mean(died_loc == "hospital", na.rm = T),1)`\%) died in hospital, `r table(died_loc)["survived"]` (`r round(100*mean(died_loc == "survived", na.rm = T),1)`\%) survived | `r sum(is.na(died_loc))`
+`discharge_month` | `r class(discharge_month)` | which month was the patient discharged (quarter)  | `r table(discharge_month)["Jan-Mar"]` (`r round(100*mean(discharge_month == "Jan-Mar", na.rm = T),1)`\%) discharged January-March, `r table(discharge_month)["Apr-Jun"]` (`r round(100*mean(discharge_month == "Apr-Jun", na.rm = T),1)`\%) discharged April-June, `r table(discharge_month)["Jul-Sep"]` (`r round(100*mean(discharge_month == "Jul-Sep", na.rm = T),1)`\%) discharged July-September, `r table(discharge_month)["Oct-Dec"]` (`r round(100*mean(discharge_month == "Oct-Dec", na.rm = T),1)`\%) discharged October-December  | `r sum(is.na(discharge_month))`
+`disposition_ed` | `r class(disposition_ed)` | where the patient was dispositioned after discharge from ED | `r table(disposition_ed)["home"]` (`r round(100*mean(disposition_ed == "home", na.rm = T),1)`\%) discharged home, `r table(disposition_ed)["admit"]` (`r round(100*mean(disposition_ed == "admit", na.rm = T),1)`\%) patient was admitted, `r table(disposition_ed)["ama"]` (`r round(100*mean(disposition_ed == "ama", na.rm = T),1)`\%) discharged against medical advice, `r table(disposition_ed)["died"]` (`r round(100*mean(disposition_ed == "died", na.rm = T),1)`\%) died in the ED | `r sum(is.na(disposition_ed))`
+`disposition_ip` | `r class(disposition_ip)` | disposition of the patient from their hospital stay after they were admitted from the ED | `r table(disposition_ip)["home"]` (`r round(100*mean(disposition_ip == "home", na.rm = T),1)`\%) routine discharge to home, `r table(disposition_ip)["admit"]` (`r round(100*mean(disposition_ip == "admit", na.rm = T),1)`\%) transferred to another facility, `r table(disposition_ip)["ama"]` (`r round(100*mean(disposition_ip == "ama", na.rm = T),1)`\%) left the hospital against medical advice, `r table(disposition_ip)["died"]` (`r round(100*mean(disposition_ip == "died", na.rm = T),1)`\%) died in hospital | `r sum(is.na(disposition_ip))`
+`ed_outcome` | `r class(ed_outcome)` | the outcome of the ED visit | `r table(ed_outcome)["released"]` (`r round(100*mean(ed_outcome == "released", na.rm = T),1)`\%) ED visit result in treat and release of the patient, `r table(ed_outcome)["admit"]` (`r round(100*mean(ed_outcome == "admit", na.rm = T),1)`\%) admitted to a hospital (same or another), `r table(ed_outcome)["died"]` (`r round(100*mean(ed_outcome == "died", na.rm = T),1)`\%) died in the ED | `r sum(is.na(ed_outcome))`
+`female` | `r class(female)` | sex of the patient | `r table(female)["1"]` (`r round(100*mean(female == "1", na.rm = T),1)`\%) Females, `r table(female)["0"]` (`r round(100*mean(female == "0", na.rm = T),1)`\%) Males | `r sum(is.na(female))`
+`hosp_cat` | `r class(hosp_cat)` | hospital category (urban VS rural) | `r table(hosp_cat)["urban"]` (`r round(100*mean(hosp_cat == "urban", na.rm = T),1)`\%) urban (Metropolitan/Micropolitan), `r table(hosp_cat)["rural"]` (`r round(100*mean(hosp_cat == "rural", na.rm = T),1)`\%) rural (non-urban) | `r sum(is.na(hosp_cat))`
+`hosp_type` | `r class(hosp_type)` | teaching status of the hospital | `r table(hosp_type)["teaching urban"]` (`r round(100*mean(hosp_type == "teaching urban", na.rm = T),1)`\%) Metropolitan teaching hosiptal, `r table(hosp_type)["non-teaching urban"]` (`r round(100*mean(hosp_type == "non-teaching urban", na.rm = T),1)`\%) Metropolitan non-teaching, `r table(hosp_type)["rural"]` (`r round(100*mean(hosp_type == "rural", na.rm = T),1)`\%) Non-metropolitan hospital | `r sum(is.na(hosp_type))`
+`income_zip` | `r class(income_zip)` | Median household income of residents in the patient's zip code | `r table(income_zip)["50K+"]` (`r round(100*mean(income_zip == "50K+", na.rm = T),1)`\%) Median household income >= 50,000, `r table(income_zip)["<50K"]` (`r round(100*mean(income_zip == "<50K", na.rm = T),1)`\%) Medican household income less than 50,000 | `r sum(is.na(income_zip))`
+`insurance` | `r class(insurance)` | Primary payer for the patient | `r table(insurance)["medicaid"]` (`r round(100*mean(insurance == "medicaid", na.rm = T),1)`\%) Medicaid, `r table(insurance)["medicare"]` (`r round(100*mean(insurance == "medicare", na.rm = T),1)`\%) Medicare, `r table(insurance)["private"]` (`r round(100*mean(insurance == "private", na.rm = T),1)`\%) Private insurance, `r table(insurance)["other"]` (`r round(100*mean(insurance == "other", na.rm = T),1)`\%) Self-pay, no charge, or other | `r sum(is.na(insurance))`
+`los_ip` | `r class(los_ip)` | inpatient length of stay (days) | Range: `r range(los_ip)` | `r sum(is.na(los_ip))`
+`pt_location` | `r class(pt_location)` | Patient location based on National Center for Health Statistics (urban VS rural) | `r table(pt_location)["urban"]` (`r round(100*mean(pt_location == "urban", na.rm = T),1)`\%) urban (Metropolitan/Micropolitan), `r table(pt_location)["rural"]` (`r round(100*mean(pt_location == "rural", na.rm = T),1)`\%) rural (non-urban) | `r sum(is.na(pt_location))`
+`region` | `r class(region)` | The region of the hospital | `r table(region)["midwest"]` (`r round(100*mean(region == "midwest", na.rm = T),1)`\%) Midwest, `r table(region)["northeast"]` (`r round(100*mean(region == "northeast", na.rm = T),1)`\%) Northeast, `r table(region)["south"]` (`r round(100*mean(region == "south", na.rm = T),1)`\%) South, `r table(region)["west"]` (`r round(100*mean(region == "west", na.rm = T),1)`\%) West | `r sum(is.na(region))`
+`totchg_ed` | `r class(totchg_ed)` | total charge for ED services (to nearest dollar) | Range: `r range(totchg_ed, na.rm = TRUE)` | `r sum(is.na(totchg_ed))`
+`totchg_ip` | `r class(totchg_ip)` | total charge for inpatient stay (including the ED charges) | Range: `r range(totchg_ip, na.rm = TRUE)` | `r sum(is.na(totchg_ip))`
+`trauma` | `r class(trauma)` | trauma level of the hospital | `r table(trauma)["level1"]` (`r round(100*mean(trauma == "level1", na.rm = T),1)`\%) level I, `r table(trauma)["level2"]` (`r round(100*mean(trauma == "level2", na.rm = T),1)`\%) level II, `r table(trauma)["level3"]` (`r round(100*mean(trauma == "level3", na.rm = T),1)`\%) level III, `r table(trauma)["non_trauma"]` (`r round(100*mean(trauma == "non_trauma", na.rm = T),1)`\%) Not a trauma center | `r sum(is.na(trauma))`
+`year` | `r class(year)` | year | Range: `r range(year)` | `r sum(is.na(year))`
+
+
+
+```{r}
+df %>%
+  count(year) %>%
+  ungroup() %>%
+  mutate(pct = round(prop.table(n) * 100, 1)) %>%
+  ggplot(aes(x = factor(year), y = pct, fill = year)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  guides(fill = FALSE) +
+  geom_text(aes(y = pct + 1, label = paste0(pct, '%')), position = position_dodge(width = .9), size = 4) +
+  labs(x = "year",
+       title = "distribution of aad patients",
+       subtitle = "visiting ED per year") +
+  theme_bw() +
+   theme(axis.text.x=element_text(angle=20))
+```
+
+
+```{r}
+df %>%
+  count(year, died) %>%
+  na.omit() %>%
+  ungroup() %>%
+  mutate(pct = round(prop.table(n) * 100, 1)) %>%
+  ggplot(aes(x = factor(year), y = pct, fill = died)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(y = pct + 1, label = paste0(pct, '%')), position = position_dodge(width = .9), size = 3) +
+  labs(x = "year",
+       y = "Percentage of observations",
+       fill = "",
+       title = "percentage of survived/died aad patient who presented to the ED per year") +
+  theme_bw() +
+   theme(axis.text.x=element_text(angle=20))
+```
+
+
+```{r}
+df %>%
+  count(year, insurance) %>%
+  na.omit() %>%
+  ungroup() %>%
+  mutate(pct = round(prop.table(n) * 100, 1)) %>%
+  ggplot(aes(x = factor(year), y = pct, fill = insurance)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(y = pct + 0.25, label = paste0(pct, '%')), position = position_dodge(width = 1), size = 2) +
+  labs(x = "year",
+       y = "Percentage of observations",
+       fill = "",
+       title = "insurance for aad patient who presented to the ED per year") +
+  theme_bw() +
+   theme(axis.text.x=element_text(angle=20))
+```
+
+
+
+```{r}
+df %>%
+  count(insurance, died) %>%
+  na.omit() %>%
+  ungroup() %>%
+  mutate(pct = round(prop.table(n) * 100, 1)) %>%
+  ggplot(aes(x = factor(insurance), y = pct, fill = died)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(y = pct + 1, label = paste0(pct, '%')), position = position_dodge(width = .9), size = 3) +
+  labs(x = "insurance",
+       y = "Percentage of observations",
+       fill = "",
+       title = "percentage of survived/died aad patient who presented to the ED per insurance") +
+  theme_bw() +
+   theme(axis.text.x=element_text(angle=20))
+```
+
+
+
+
+
+```{r}
+df %>%
+  count(trauma, died) %>%
+  na.omit() %>%
+  ungroup() %>%
+  mutate(pct = round(prop.table(n) * 100, 1)) %>%
+  ggplot(aes(x = factor(trauma), y = pct, fill = died)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(y = pct + 1, label = paste0(pct, '%')), position = position_dodge(width = .9), size = 3) +
+  labs(x = "trauma center level",
+       y = "Percentage of observations",
+       fill = "",
+       title = "percentage of survived/died aad patient who presented to the ED per trauma center") +
+  theme_bw() +
+   theme(axis.text.x=element_text(angle=20))
+```
+
+
+```{r}
+df %>%
+  count(hosp_type, died) %>%
+  na.omit() %>%
+  ungroup() %>%
+  mutate(pct = round(prop.table(n) * 100, 1)) %>%
+  ggplot(aes(x = factor(hosp_type), y = pct, fill = died)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(y = pct + 1, label = paste0(pct, '%')), position = position_dodge(width = .9), size = 3) +
+  labs(x = "hospital type",
+       y = "Percentage of observations",
+       fill = "",
+       title = "percentage of survived/died aad patient who presented to the ED hospital type") +
+  theme_bw() +
+   theme(axis.text.x=element_text(angle=20))
+```
+
+```{r}
+df %>%
+  count(region, died) %>%
+  na.omit() %>%
+  ungroup() %>%
+  mutate(pct = round(prop.table(n) * 100, 1)) %>%
+  ggplot(aes(x = factor(region), y = pct, fill = died)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(y = pct + 1, label = paste0(pct, '%')), position = position_dodge(width = .9), size = 3) +
+  labs(x = "hospital region",
+       y = "Percentage of observations",
+       fill = "",
+       title = "percentage of survived/died aad patient who presented to the ED per hospital region") +
+  theme_bw() +
+   theme(axis.text.x=element_text(angle=20))
+```
+
+
+```{r}
+df %>%
+  count(amonth, died) %>%
+  na.omit() %>%
+  ungroup() %>%
+  mutate(pct = round(prop.table(n) * 100, 1)) %>%
+  ggplot(aes(x = factor(amonth), y = pct, fill = died)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(y = pct + 1, label = paste0(pct, '%')), position = position_dodge(width = .9), size = 3) +
+  labs(x = "month",
+       y = "Percentage of observations",
+       fill = "",
+       title = "percentage of survived/died aad patient who presented to the ED per month") +
+  theme_bw() +
+   theme(axis.text.x=element_text(angle=20))
+```
+
+
+```{r}
+df %>%
+  count(income_zip, died) %>%
+  na.omit() %>%
+  ungroup() %>%
+  mutate(pct = round(prop.table(n) * 100, 1)) %>%
+  ggplot(aes(x = factor(income_zip), y = pct, fill = died)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(y = pct + 1, label = paste0(pct, '%')), position = position_dodge(width = .9), size = 3) +
+  labs(x = "median household income/zip-code",
+       y = "Percentage of observations",
+       fill = "",
+       title = "percentage of survived/died aad patient who presented to the ED",
+subtitle = "per median household income of the patient resident zip code") +
+  theme_bw() +
+   theme(axis.text.x=element_text(angle=20))
+```
+
+
+```{r logistic regression model for died/survived}
+
+logm <- svyglm(died_er~age + factor(year) + hosp_type + female + cm_chf + cm_htn + cm_defanemia + cm_hypo + cm_dm + cm_dmcx + cm_defanemia + cm_cancer + cm_bldloss + insurance + amonth, family=quasibinomial, design=df_s)
+
+summary(logm)
+```
+
+
